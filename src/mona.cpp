@@ -31,7 +31,6 @@
 #include <fstream>
 #include <limits>
 #include <vector>
-//#include <list>
 #include <string>
 #include <cmath>
 #include <thread>
