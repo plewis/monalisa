@@ -1,4 +1,4 @@
-# monalisa
+# The Evolution of Mona Lisa
 
 This software provides a graphical illustration of the power of natural selection, especially as it applies to mimicry. It uses a simulation of natural selection in which fitness is determined by similarity to a reference image. Technically it is artificial selection since humans are providing the environment and fitness function, but the underlying process is identical.
 
