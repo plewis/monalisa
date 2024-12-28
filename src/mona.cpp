@@ -75,6 +75,8 @@ using namespace cimg_library;
 
 typedef unsigned char img_t;
 
+CImg<img_t> saved_image = CImg<img_t>::empty();
+
 struct ThreadSchedule {
     ThreadSchedule(unsigned nt, unsigned ni) : _nthreads(nt), _nindivs(ni) {
         // first is index of first individual in range
@@ -266,8 +268,28 @@ class Individual {
             _curr_green = *g;
             _curr_blue  = *b;
         }
+        
+        void replaceGenome(CImg<img_t> & replacement) {
+            _genome = replacement;
+        }
                 
-        void display(CImgDisplay & disp) {
+        void display(CImgDisplay & disp, bool start_message) {
+            if (start_message) {
+                // Save _genome so that it can be replaced when the message is supposed to go away
+                ::saved_image = _genome;
+                
+                // Draw the text on an empty image in order to determine the rendered dimensions
+                CImg<unsigned char> dummy;
+                vector<img_t> fg = {255, 255, 255};
+                vector<img_t> bg = {0, 0, 0};
+                dummy.draw_text(0, 0, "Press S to begin", &fg[0], &bg[0], 1, 23);
+                unsigned w = dummy.width();
+                unsigned h = dummy.height();
+                
+                unsigned x = _genome.width()/2.0 - w/2.0;
+                unsigned y = _genome.height()/2.0 - h/2.0;
+                _genome.draw_text(x, y, "Press S to begin", &fg[0], &bg[0], 1.0, 23);
+            }
             disp = _genome;
         }
         
@@ -704,9 +726,9 @@ int main(int argc, const char * argv[]) {
     float best_score = scores[0].first;
     float worst_score = scores.rbegin()->first;
     Individual best_indiv = population[scores[0].second];
-    best_indiv.display(mainwindow);
+    best_indiv.display(mainwindow, /*start_message*/true);
     best_indiv.saveToFile("best.jpg", 0);
-    
+        
     StopWatch stopwatch;
     stopwatch.start();
     
@@ -715,114 +737,117 @@ int main(int argc, const char * argv[]) {
     float fitness_slope = numeric_limits<float>::max();
     unsigned generation = 0;
     bool done = false;
+    bool running = false;
     while (!done) {
-        generation++;
-                
-        // Sanity checks to ensure scores were sorted properly
-        assert(scores[0].first <= scores[nreprod-1].first);
-        if (nindivs > 2) {
-            assert(scores[nreprod-1].first <= scores[nreprod].first);
-            assert(scores[nreprod].first <= scores[nindivs-1].first);
-        }
-        
-        // The value of retain[k] will be true if population[k] is one of
-        // the nreprod best individuals in the population.
-        vector<bool> retain(nindivs, false);
-        vector<unsigned> made_the_cut(nreprod);
-        for (unsigned i = 0; i < nreprod; ++i) {
-            unsigned made_the_cut_index = scores[i].second;
-            retain[made_the_cut_index] = true;
-            made_the_cut[i] = made_the_cut_index;
-        }
-        sort(made_the_cut.begin(), made_the_cut.end());
-        
-        // Replace the individuals that didn't make the cut
-        unsigned j = 0;                 // index into made_the_cut
-        unsigned k = made_the_cut[j];   // next individual that made the cut
-        
-        assert(made_the_cut.size() == nreprod);
-        unsigned check_number_copied = 0;
-        
-        for (unsigned child_index = 0; child_index < nindivs; ++child_index) {
-            if (child_index < k) {
-                // Choose a parent
-                unsigned pos = lot.randint(0, nreprod - 1);
-                unsigned parent_index = made_the_cut[pos];
-
-                // Copy parent's genome to the child
-                check_number_copied++;
-                population[child_index] = population[parent_index];
+        if (running) {
+            generation++;
+                    
+            // Sanity checks to ensure scores were sorted properly
+            assert(scores[0].first <= scores[nreprod-1].first);
+            if (nindivs > 2) {
+                assert(scores[nreprod-1].first <= scores[nreprod].first);
+                assert(scores[nreprod].first <= scores[nindivs-1].first);
             }
-            else {
-                if (j < nreprod - 1)
-                    k = made_the_cut[++j];
-                else
-                    k = nindivs;
-            }
-        }
-        if (check_number_copied != nindivs - nreprod) {
-            cerr << "\ngeneration " << generation << ":" << endl;
             
-            cerr << "\nretain: ";
-            for (unsigned i = 0; i < nindivs; ++i) {
-                cerr << (retain[i] ? "X" : ".");
-            }
-            cerr << endl;
-            
-            cerr << "\nmade_the_cut: ";
+            // The value of retain[k] will be true if population[k] is one of
+            // the nreprod best individuals in the population.
+            vector<bool> retain(nindivs, false);
+            vector<unsigned> made_the_cut(nreprod);
             for (unsigned i = 0; i < nreprod; ++i) {
-                cerr << made_the_cut[i] << " ";
+                unsigned made_the_cut_index = scores[i].second;
+                retain[made_the_cut_index] = true;
+                made_the_cut[i] = made_the_cut_index;
             }
-            cerr << endl;
-            throw XProj(format("check_number_copied = %d, nindivs = %d, nreprod = %d, nindivs - nreprod = %d\n ") % check_number_copied % nindivs % nreprod % (nindivs - nreprod));
-        }
-
-        // Let all individuals undergo mutation, except preserve the best
-        // individual if untouchable is true
-        unsigned untouchable_index = (Individual::untouchable ? made_the_cut[0] : nindivs);
-        for (unsigned i = 0; i < nindivs; ++i) {
-            if (i != untouchable_index)
-                population[i].mutate();
-        }
-        
-        scorePopulation(population, scores, refimg, thread_sched, false);
-        resetPrevScore(population);
-        
-        // Check if we have a new all-time best individual
-        if (scores[0].first < best_score) {
-            best_score = scores[0].first;
-            best_indiv = population[scores[0].second];
-            if (verbose) {
-                cout << "new best score (" << best_score << ") in generation " << generation << endl;
-                outf << "new best score (" << best_score << ") in generation " << generation << endl;
-            }
-        }
-        
-        // Check if we have a new all-time worst score
-        if (scores.rbegin()->first > worst_score) {
-            worst_score = scores.rbegin()->first;
-        }
-                
-        if (generation % report_every == 0) {
-            fitness_slope = updateProgressPlot(generation, best_score, progwindow);
-            string msg = str(format("generation %d\n  best score = %.5f\n  fitness slope = %.5f")
-                % generation
-                % best_score
-                % fitness_slope
-                );
-            cout << msg << endl;
-            outf << msg << endl;
+            sort(made_the_cut.begin(), made_the_cut.end());
             
-            if (display_all_time_best) {
-                best_indiv.display(mainwindow);
+            // Replace the individuals that didn't make the cut
+            unsigned j = 0;                 // index into made_the_cut
+            unsigned k = made_the_cut[j];   // next individual that made the cut
+            
+            assert(made_the_cut.size() == nreprod);
+            unsigned check_number_copied = 0;
+            
+            for (unsigned child_index = 0; child_index < nindivs; ++child_index) {
+                if (child_index < k) {
+                    // Choose a parent
+                    unsigned pos = lot.randint(0, nreprod - 1);
+                    unsigned parent_index = made_the_cut[pos];
+    
+                    // Copy parent's genome to the child
+                    check_number_copied++;
+                    population[child_index] = population[parent_index];
+                }
+                else {
+                    if (j < nreprod - 1)
+                        k = made_the_cut[++j];
+                    else
+                        k = nindivs;
+                }
             }
-            else {
-                population[0].display(mainwindow);
+            if (check_number_copied != nindivs - nreprod) {
+                cerr << "\ngeneration " << generation << ":" << endl;
+                
+                cerr << "\nretain: ";
+                for (unsigned i = 0; i < nindivs; ++i) {
+                    cerr << (retain[i] ? "X" : ".");
+                }
+                cerr << endl;
+                
+                cerr << "\nmade_the_cut: ";
+                for (unsigned i = 0; i < nreprod; ++i) {
+                    cerr << made_the_cut[i] << " ";
+                }
+                cerr << endl;
+                throw XProj(format("check_number_copied = %d, nindivs = %d, nreprod = %d, nindivs - nreprod = %d\n ") % check_number_copied % nindivs % nreprod % (nindivs - nreprod));
             }
-        }
-        
-        if (generation % save_every == 0) {
-            best_indiv.saveToFile("best.jpg", generation/save_every);
+    
+            // Let all individuals undergo mutation, except preserve the best
+            // individual if untouchable is true
+            unsigned untouchable_index = (Individual::untouchable ? made_the_cut[0] : nindivs);
+            for (unsigned i = 0; i < nindivs; ++i) {
+                if (i != untouchable_index)
+                    population[i].mutate();
+            }
+            
+            scorePopulation(population, scores, refimg, thread_sched, false);
+            resetPrevScore(population);
+            
+            // Check if we have a new all-time best individual
+            if (scores[0].first < best_score) {
+                best_score = scores[0].first;
+                best_indiv = population[scores[0].second];
+                if (verbose) {
+                    cout << "new best score (" << best_score << ") in generation " << generation << endl;
+                    outf << "new best score (" << best_score << ") in generation " << generation << endl;
+                }
+            }
+            
+            // Check if we have a new all-time worst score
+            if (scores.rbegin()->first > worst_score) {
+                worst_score = scores.rbegin()->first;
+            }
+                    
+            if (generation % report_every == 0) {
+                fitness_slope = updateProgressPlot(generation, best_score, progwindow);
+                string msg = str(format("generation %d\n  best score = %.5f\n  fitness slope = %.5f")
+                    % generation
+                    % best_score
+                    % fitness_slope
+                    );
+                cout << msg << endl;
+                outf << msg << endl;
+                
+                if (display_all_time_best) {
+                    best_indiv.display(mainwindow, /*start_message*/false);
+                }
+                else {
+                    population[0].display(mainwindow, /*start_message*/false);
+                }
+            }
+            
+            if (generation % save_every == 0) {
+                best_indiv.saveToFile("best.jpg", generation/save_every);
+            }
         }
 
         unsigned keymain = mainwindow.key();
@@ -831,6 +856,11 @@ int main(int argc, const char * argv[]) {
         if (keymain == cimg::keyQ || keycf == cimg::keyQ || keyplot == cimg::keyQ) {
             best_indiv.saveToFile("best-final.jpg", -1);
             done = true;
+        }
+        else if (keymain == cimg::keyS || keycf == cimg::keyS || keyplot == cimg::keyS) {
+            running = true;
+            best_indiv.replaceGenome(::saved_image);
+            best_indiv.display(mainwindow, /*start_message*/false);
         }
         
         if (generation == stop_at_generation) {
