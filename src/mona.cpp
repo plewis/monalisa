@@ -70,6 +70,13 @@ Lot lot;
 
 #define cimg_display 1
 #define cimg_use_png 0
+
+// 0 = no debug messages
+// 1 = normal debug messages displayed on standard error
+// 2 = normal debug messages displayed in modal windows (default value)
+// 3 = high debug messages
+#define cimg_verbosity 2
+
 #include "CImg.h"
 using namespace cimg_library;
 
@@ -251,8 +258,8 @@ class Individual {
             assert(_curr_blue == _prev_blue);
             
             // Choose a row and column at random to mutate
-            _x = ::lot.randint(0, refh - 1);
-            _y = ::lot.randint(0, refw - 1);
+            _x = ::lot.randint(0, refw - 1);
+            _y = ::lot.randint(0, refh - 1);
                         
             // Mutate all three channels for pixel at _x,_y
             img_t * r  = _genome.data(_x, _y, 0, 0);
