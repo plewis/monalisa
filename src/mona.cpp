@@ -591,7 +591,12 @@ float updateProgressPlot(unsigned generation, float best_score, CImgDisplay & pr
     }
         
     if (progress.size() > 0) {
+        double maxy = progress[0].second;
         ofstream progf("progress.R");
+
+        progf << "cwd = system('cd \"$( dirname \"$0\" )\" && pwd', intern = TRUE)\n";
+        progf << "setwd(cwd)\n";
+        progf << "pdf(\"progress-plot.pdf\")\n";
 
         progf << "gen <- c(" << progress[0].first;
         for (unsigned i = 1; i < progress.size(); ++i)
@@ -603,10 +608,14 @@ float updateProgressPlot(unsigned generation, float best_score, CImgDisplay & pr
             progf << "," << progress[i].second;
         progf << ")" << endl;
 
-        progf << "plot(gen, score, type=\"b\", pch=20, lwd=2, col=\"navy\", xlab=\"generation\", ylab=\"best score\")" << endl;
+        progf << "plot(gen, score, type=\"l\", lwd=2, col=\"navy\", xlab=\"generation\", ylab=\"best score\", ylim=c(0," << maxy << "))" << endl;
+        progf << "legend(x = \"topright\", legend=c(\"" << nindivs << ":" << nreprod << "\"), fill = c(\"navy\"))\n";
+
+        progf << "dev.off()\n";
 
         progf.close();
     }
+    
     return slope;
 }
 
