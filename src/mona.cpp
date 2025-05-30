@@ -41,6 +41,7 @@ unsigned major_version     = 1;
 unsigned minor_version     = 0;
 string author              = "Paul O. Lewis";
 string minor_version_date  = "20-Dec-2024";
+bool black_and_white_image = false;
 
 #include <boost/format.hpp>
 #include <boost/program_options.hpp>
@@ -195,11 +196,16 @@ class Individual {
             _score          = numeric_limits<float>::max();
             _prev_score     = _score;
             _genome         = CImg<img_t>::empty();
+
             _x              = 0;
             _y              = 0;
+
+            _prev_bw        = 255;
             _prev_red       = 255;
             _prev_green     = 255;
             _prev_blue      = 255;
+
+            _curr_bw        = 255;
             _curr_red       = 255;
             _curr_green     = 255;
             _curr_blue      = 255;
@@ -210,30 +216,47 @@ class Individual {
             _genome = ref;
             
             // Initialize colors
-            img_t * r  = _genome.data(0, 0, 0, 0);
-            img_t * g  = _genome.data(0, 0, 0, 1);
-            img_t * b  = _genome.data(0, 0, 0, 2);
-            for(int row = 0; row < _genome.height(); row++) {
-                for(int col = 0; col < _genome.width(); col++) {
-                    *r = (img_t)max_rgb*::lot.uniform();
-                    *g = (img_t)max_rgb*::lot.uniform();
-                    *b = (img_t)max_rgb*::lot.uniform();
-
-                    ++r;
-                    ++g;
-                    ++b;
+            if (black_and_white_image) {
+                img_t * bw  = _genome.data(0, 0, 0, 0);
+                
+                for(int row = 0; row < _genome.height(); row++) {
+                    for(int col = 0; col < _genome.width(); col++) {
+                        *bw = (img_t)max_rgb*::lot.uniform();
+                        ++bw;
+                    }
                 }
+    
+                bw  = _genome.data(_x, _y, 0, 0);
+                _prev_bw   = *bw;
+                _curr_bw   = *bw;
             }
-
-            r  = _genome.data(_x, _y, 0, 0);
-            g  = _genome.data(_x, _y, 0, 1);
-            b  = _genome.data(_x, _y, 0, 2);
-            _prev_red   = *r;
-            _prev_green = *g;
-            _prev_blue  = *b;
-            _curr_red   = *r;
-            _curr_green = *g;
-            _curr_blue  = *b;
+            else {
+                img_t * r  = _genome.data(0, 0, 0, 0);
+                img_t * g  = _genome.data(0, 0, 0, 1);
+                img_t * b  = _genome.data(0, 0, 0, 2);
+                
+                for(int row = 0; row < _genome.height(); row++) {
+                    for(int col = 0; col < _genome.width(); col++) {
+                        *r = (img_t)max_rgb*::lot.uniform();
+                        *g = (img_t)max_rgb*::lot.uniform();
+                        *b = (img_t)max_rgb*::lot.uniform();
+    
+                        ++r;
+                        ++g;
+                        ++b;
+                    }
+                }
+    
+                r  = _genome.data(_x, _y, 0, 0);
+                g  = _genome.data(_x, _y, 0, 1);
+                b  = _genome.data(_x, _y, 0, 2);
+                _prev_red   = *r;
+                _prev_green = *g;
+                _prev_blue  = *b;
+                _curr_red   = *r;
+                _curr_green = *g;
+                _curr_blue  = *b;
+            }
         }
         
         void mutateColor(img_t & color) {
@@ -253,27 +276,38 @@ class Individual {
         float getScore() {return _score;}
         
         void mutate() {
-            assert(_curr_red == _prev_red);
-            assert(_curr_green == _prev_green);
-            assert(_curr_blue == _prev_blue);
-            
             // Choose a row and column at random to mutate
             _x = ::lot.randint(0, refw - 1);
             _y = ::lot.randint(0, refh - 1);
-                        
-            // Mutate all three channels for pixel at _x,_y
-            img_t * r  = _genome.data(_x, _y, 0, 0);
-            img_t * g  = _genome.data(_x, _y, 0, 1);
-            img_t * b  = _genome.data(_x, _y, 0, 2);
-            _prev_red   = *r;
-            _prev_green = *g;
-            _prev_blue  = *b;
-            mutateColor(*r);
-            mutateColor(*g);
-            mutateColor(*b);
-            _curr_red   = *r;
-            _curr_green = *g;
-            _curr_blue  = *b;
+
+            if (black_and_white_image) {
+                assert(_curr_bw == _prev_bw);
+                            
+                // Mutate channel for pixel at _x,_y
+                img_t * bw  = _genome.data(_x, _y, 0, 0);
+                _prev_bw   = *bw;
+                mutateColor(*bw);
+                _curr_bw   = *bw;
+            }
+            else {
+                assert(_curr_red == _prev_red);
+                assert(_curr_green == _prev_green);
+                assert(_curr_blue == _prev_blue);
+                
+                // Mutate all three channels for pixel at _x,_y
+                img_t * r  = _genome.data(_x, _y, 0, 0);
+                img_t * g  = _genome.data(_x, _y, 0, 1);
+                img_t * b  = _genome.data(_x, _y, 0, 2);
+                _prev_red   = *r;
+                _prev_green = *g;
+                _prev_blue  = *b;
+                mutateColor(*r);
+                mutateColor(*g);
+                mutateColor(*b);
+                _curr_red   = *r;
+                _curr_green = *g;
+                _curr_blue  = *b;
+            }
         }
         
         void replaceGenome(CImg<img_t> & replacement) {
@@ -306,29 +340,52 @@ class Individual {
         
         void resetPrevScore() {
             _prev_score = _score;
-            _prev_red   = _curr_red;
-            _prev_green = _curr_green;
-            _prev_blue  = _curr_blue;
+            if (black_and_white_image) {
+                _prev_bw   = _curr_bw;
+            }
+            else {
+                _prev_red   = _curr_red;
+                _prev_green = _curr_green;
+                _prev_blue  = _curr_blue;
+            }
         }
         
         double calcScoreXY(const CImg<img_t> & refimg) {
             // Assume all pixels are the same except pixel at (_x,_y)
+            // Get previous score
             float score = pow(_prev_score,2.0);
-            const img_t * r0 = refimg.data(_x, _y, 0, 0);
-            const img_t * g0 = refimg.data(_x, _y, 0, 1);
-            const img_t * b0 = refimg.data(_x, _y, 0, 2);
-            float srprev = pow(_prev_red   - *r0, 2.0);
-            float sgprev = pow(_prev_green - *g0, 2.0);
-            float sbprev = pow(_prev_blue  - *b0, 2.0);
-            score -= (srprev + sgprev + sbprev);
-            const img_t * r  = _genome.data(_x, _y, 0, 0);
-            const img_t * g  = _genome.data(_x, _y, 0, 1);
-            const img_t * b  = _genome.data(_x, _y, 0, 2);
-            float sr = pow(*r - *r0, 2.0);
-            float sg = pow(*g - *g0, 2.0);
-            float sb = pow(*b - *b0, 2.0);
-            score += (sr + sg + sb);
+            if (black_and_white_image) {
+                // Get pixel in refimg at _x,_y
+                const img_t * bw0 = refimg.data(_x, _y, 0, 0);
+                float sbwprev = pow(_prev_bw   - *bw0, 2.0);
+                score -= sbwprev;
+                const img_t * bw  = _genome.data(_x, _y, 0, 0);
+                float sbw = pow(*bw - *bw0, 2.0);
+                score += sbw;
+            }
+            else {
+                const img_t * r0 = refimg.data(_x, _y, 0, 0);
+                const img_t * g0 = refimg.data(_x, _y, 0, 1);
+                const img_t * b0 = refimg.data(_x, _y, 0, 2);
+                float srprev = pow(_prev_red   - *r0, 2.0);
+                float sgprev = pow(_prev_green - *g0, 2.0);
+                float sbprev = pow(_prev_blue  - *b0, 2.0);
+                score -= (srprev + sgprev + sbprev);
+                const img_t * r  = _genome.data(_x, _y, 0, 0);
+                const img_t * g  = _genome.data(_x, _y, 0, 1);
+                const img_t * b  = _genome.data(_x, _y, 0, 2);
+                float sr = pow(*r - *r0, 2.0);
+                float sg = pow(*g - *g0, 2.0);
+                float sb = pow(*b - *b0, 2.0);
+                score += (sr + sg + sb);
+            }
             _score = sqrt(score);
+            
+            //temporary!
+            if (isnan(_score)) {
+                cerr << "_score = " << _score << endl;
+                cerr << "score  = " << score << endl;
+            }
 
             return _score;
         }
@@ -388,10 +445,12 @@ class Individual {
         unsigned    _x;
         unsigned    _y;
         
+        img_t       _prev_bw;
         img_t       _prev_red;
         img_t       _prev_green;
         img_t       _prev_blue;
         
+        img_t       _curr_bw;
         img_t       _curr_red;
         img_t       _curr_green;
         img_t       _curr_blue;
@@ -621,6 +680,9 @@ float updateProgressPlot(unsigned generation, float best_score, CImgDisplay & pr
 
 void scoreIndivRange(vector<Individual> & population, vector<pair<float,unsigned> > & scores, const CImg<img_t> & refimg, unsigned first, unsigned last, bool slow) {
     for (unsigned i = first; i < last; ++i) {
+        // slow = true causes score to be computed for all pixels
+        // slow = false just calculates score for pixel at _x, _y, assuming that 
+        //        that point is the only part that has changed
         double s = slow ? population[i].calcScore(refimg) :  population[i].calcScoreXY(refimg);
         scores[i].first = s;
         scores[i].second = i;
@@ -721,6 +783,8 @@ int main(int argc, const char * argv[]) {
 
     cout << "reference image spectrum = " << refimg.spectrum() << endl;
     outf << "reference image spectrum = " << refimg.spectrum() << endl;
+    
+    black_and_white_image = (bool)(refimg.spectrum() == 1);
 
     CImgDisplay mainwindow;
     CImgDisplay cfwindow;
@@ -757,6 +821,15 @@ int main(int argc, const char * argv[]) {
     while (!done) {
         if (running) {
             generation++;
+            
+            //temporary!
+            //if (scores[0].first > scores[nreprod-1].first) {
+            if (generation > 140000) {
+                cerr << "Scores not sorted correctly:" << endl;
+                cerr << "  nreprod = " << nreprod << endl;
+                cerr << "  scores[0].first         = " << scores[0].first << endl;
+                cerr << "  scores[nreprod-1].first = " << scores[nreprod-1].first << endl;
+            }
                     
             // Sanity checks to ensure scores were sorted properly
             assert(scores[0].first <= scores[nreprod-1].first);
